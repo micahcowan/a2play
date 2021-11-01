@@ -6,7 +6,7 @@ PITCHHI = $8
 CPYHI   = $1E
 
         .org $4000
-        LDY #0
+START:  LDY #0
 REPT:
         LDA PITCHHI
         STA CPYHI
@@ -21,3 +21,13 @@ TWEAK:  LDA SPKR
         DEY
         BNE REPT
 DONE:   RTS
+
+        BRK
+        LDA #$FF
+        STA PITCHLO
+        LDA #$00
+        STA PITCHHI
+        JSR START
+        LDY #$80
+        JSR REPT
+        RTS
