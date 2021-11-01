@@ -1,5 +1,6 @@
 tone
 tones
+*.list
 *.o
 *.TOK
 TONE.DSK

@@ -23,7 +23,7 @@ tones: tones.c
 	./tones
 
 .s.o:
-	ca65 -o $@ $<
+	ca65 --listing $(subst .o,.list,$@) -o $@ $<
 
 tone: tone.o
 	ld65 -t none -o $@ $<
