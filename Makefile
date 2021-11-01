@@ -18,6 +18,9 @@ TONE.DSK: Makefile ORIG.DSK PLAY.TOK MPLAY.TOK tone mtone
 PLAY.TOK: PLAY.BAS
 	tokenize_asoft < $< > $@ || { rm -f $@; exit 1; }
 
+MPLAY.TOK: MPLAY.BAS
+	tokenize_asoft < $< > $@ || { rm -f $@; exit 1; }
+
 tones: tones.c
 	gcc -o tones -lm tones.c
 	./tones
