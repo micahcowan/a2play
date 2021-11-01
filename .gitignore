@@ -1,6 +1,6 @@
 tone
 tones
 *.o
-PLAY.TOK
+*.TOK
 TONE.DSK
 mtone
