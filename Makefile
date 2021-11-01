@@ -1,6 +1,6 @@
-all: mtone TONE.DSK
+all: TONE.DSK
 
-TONE.DSK: Makefile ORIG.DSK PLAY.TOK tone
+TONE.DSK: Makefile ORIG.DSK PLAY.TOK tone mtone
 	@echo
 	@echo '*** Making $@ ***'
 	set -e; \
@@ -8,7 +8,8 @@ TONE.DSK: Makefile ORIG.DSK PLAY.TOK tone
 	cp ORIG.DSK $@; \
 	\
 	dos33 -y $@ SAVE A PLAY.TOK PLAY; \
-	dos33 -y $@ BSAVE -a 300 tone TONE; \
+	dos33 -y $@ BSAVE -a '0x300' tone TONE; \
+	dos33 -y $@ BSAVE -a '0x4000' mtone MTONE; \
 	\
 	trap - EXIT
 	@echo
