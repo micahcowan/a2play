@@ -4,6 +4,8 @@
 ;#link "play.s"
 ;#resource "basic-utils.inc"
 ;#resource "play.cfg"
+;#resource "apple2.rom"
+
 
 .macpack apple2
 
