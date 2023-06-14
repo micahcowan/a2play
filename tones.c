@@ -1,8 +1,6 @@
 #include <stdio.h>
 #include <math.h>
 
-#define PRINT_TONES 0
-
 int
 main(void)
 {
@@ -16,12 +14,7 @@ main(void)
         double tone = octStart;
         printf("[%.2f]\n", octStart);
         for (int i=0; i<13; ++i) {
-            if (PRINT_TONES) {
-                printf("%.2f ", tone);
-            }
-            else {
-                printf("%lu ", (unsigned long)(cpu/tone));
-            }
+            printf("(%.2f) %lu : ", tone, (unsigned long)(cpu/tone/2.));
             tone *= halfStep;
             if (tone > 4200.0) {
                 // Highest tone on a piano is 4186; next up would be
