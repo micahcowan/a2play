@@ -4,7 +4,7 @@
 
 ASoftProg:
 	lineP "PLAYING MUSIC..."
-        line "A$ = ",'"',"A ",'"'
+        line "A$ = ",'"',"A# ",'"'
         line "Q$ = ",'"',"Q ",'"'
         line "& PLAYE, A$+",'"',"C",'"',": ?",'"',"REST",'"'
 FIX_LINE .set LINE_NUMBER

@@ -52,6 +52,8 @@ StrRemain:
 StrSpec = $6
 StrSaved:
 	.word 0
+Octave:
+	.byte $4
 AmperPlay:
 	jsr CheckTag
         bcs YesItsUs
@@ -105,8 +107,14 @@ DoNextNote:
         sta StrSaved+1
         
 	jsr StrGetCur
-        beq @exit
+        beq @exit; end of string; done processing!
+        
 	jsr GetNoteBasePitch
+        jsr AdjustForOctave
+        jsr PrintFacBytes
+        jsr Mon_CROUT
+        jsr AS_PRINT_FAC
+        
         jsr StrGetNext
         cmp #' '
         beq @skipSp
@@ -117,6 +125,34 @@ DoNextNote:
         cmp #' '
         beq @skipSp
 @exit:
+	rts
+
+AdjustForOctave:
+	jsr TryReadOctave
+        ; We want to divide the pitch by 2 for
+        ;  each octave above 0. The simplest way
+        ;  to do that is just to subtract the octave #
+        ;  from the FP number's exponent byte!
+        lda AS_FAC
+        sec
+        sbc Octave
+        sta AS_FAC
+	rts
+
+TryReadOctave:
+	jsr StrGetNext
+        cmp #'0'
+        bcc @notOct ; c < '0', not an octave number
+        cmp #'9'
+        bcs @notOct ; c > '8', not an octave number
+        ; Yes, we found an octave number!
+        ;  set it.
+        sec
+        sbc #'0'
+        sta Octave
+        rts
+@notOct:
+	jsr StrRewind
 	rts
 
 PrintFacBytes:
@@ -132,11 +168,40 @@ PrintFacBytes:
         jsr Mon_CROUT
 	rts
 
-InitPitch:
-	
+Accidentals:
+Flats:
+	.byte "B-"
+Sharps:
+	.byte "#+"
+AccidentalsEnd:
+AdjustAccidental:
+	pha ; push current # halfsteps from base (always >= 3)
+        jsr StrGetNext
+	sta @srch
+	ldx #0
+@lo:
+	lda Accidentals,x
+        @srch = * + 1
+        cmp #$00 ; OVERWRITTEN
+        beq @found
+        inx
+        cpx #(AccidentalsEnd - Accidentals)
+        bne @lo
+        ; Not found! Rewind character
+        jsr StrRewind
+        pla ; pull earlier halfsteps #
 	rts
+@found:
+	cpx #(Sharps - Flats) ; did we find sharp or flat?
+        pla
+        bcc @flat
+        ; sharp
+        adc #0 ; (carry is set)
+	rts
+@flat:	; flat
+	sbc #0 ; (carry unset; borrow is set)
+        rts
 GetNoteBasePitch:
-	jsr InitPitch
         cmp #'H'
         bcs NoteNameErr ; > 'G', bail
         sec
@@ -144,6 +209,8 @@ GetNoteBasePitch:
         bcc NoteNameErr ; < 'A', bail
         tax
         lda NoteSteps,x
+        
+        jsr AdjustAccidental
         
         ; We have N, we want HalfStep^N.
         
@@ -173,9 +240,6 @@ GetNoteBasePitch:
         lda $A0
         jsr AS_GIVAYF
         .endif
-        jsr PrintFacBytes
-        jsr Mon_CROUT
-        jsr AS_PRINT_FAC
 	rts
 NoteNameErr:
 	; handle note spec error
@@ -229,6 +293,14 @@ PrepNoteStr:
         sta StrSpec
         lda AS_INDEX+1
         sta StrSpec+1
+        rts
+StrRewind:
+	inc StrRemain
+        lda StrSpec
+        bne :+
+        dec StrSpec+1
+        :
+        dec StrSpec
         rts
 StrGetNext:
 	lda StrRemain
