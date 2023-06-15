@@ -55,7 +55,16 @@ StrSaved:
 Octave:
 	.byte $4
 Pitch:
+	; Reset for every note. Stored as 16-bit int
 	.word 0
+Tempo:
+	; Stored in "cycles per minute" that a beat takes
+        ; Default value is 340,909; equivalent to 180bpm
+        .byte $93, $A6, $75, $A0, $00
+Duration:
+	; Current note duration, in fractions of a beat.
+        ; (start with quarter note = 1 beat, so 1).
+        .byte $81, $80, $0, $0, $0
 AmperPlay:
 	jsr CheckTag
         bcs YesItsUs
@@ -114,12 +123,13 @@ DoNextNote:
 	jsr GetNoteBasePitch
         jsr AdjustForOctave
         jsr RoundPitchAndSave
+        ; read optional note duration
+        jsr CalcIterations
         
-.if 0
+.if 1
 	; Print the saved integer pitch
         jsr AS_GIVAYF
         jsr AS_PRINT_FAC
-        jsr Mon_CROUT
         jsr Mon_CROUT
         lda Pitch
         jsr Mon_PRBYTE
@@ -127,6 +137,7 @@ DoNextNote:
         jsr Mon_COUT
         lda Pitch+1
         jsr Mon_PRBYTE
+        jsr Mon_CROUT
         jsr Mon_CROUT
         ;jsr AS_PRINT_FAC
 .endif
@@ -143,6 +154,44 @@ DoNextNote:
 @exit:
 	rts
 
+CalcIterations:
+	; What we need: how many sound half-waves to generate
+        ; what we have: tempo, note duration, length of
+        ;  half-waves in cycles
+        
+        ; note duration = Db beats
+        ; convert Db beats to Ds seconds
+        ;   with: Ds seconds
+        ;            = Db beats / tempo = Db / (Tempo beats/minute)
+        ;         Ds seconds
+        ;            = Db beats / tempo beats/(60 seconds)
+        ;            = (60 * Db / tempo) seconds
+        ;	  Ds = 60 * Db / tempo
+        ;   Ds seconds * (cycles/second) = Dc cycles
+        ;      cycles/second = 1_022_727
+        ;   Dc cycles = 1_022_727 * Ds seconds
+        ;   Di half-waves [iterations]
+        ;      = Dc cycles / (Hw cycles/half-wave)
+        ;   Di = Dc/Hw
+        ;
+        ;   Tcb cycles/beat
+        ;      = (cycles/second) * 60/(tempo beats/minute)
+        ;   Tcb = 1_022_727 * 60/Tbpm
+        ;
+        ;   Dc cycles = Db beats * Tcb (cycles/beat)
+        ;   Dc = Db * Tcb
+        ;   Di = Dc/Hw = (Db * Tcb)/Hw
+        ;     - or -
+        ;   #iter = (duration in beats * a minute in cycles / tempo in beats per minute)
+        ;             / (half-wave length in terms of cycles)
+        
+        ; Start with Tempo (stored as cycles-per-beat)
+        ; Divide by pitch (half-wave length in cycles)
+        ; Multiply by note duration in beats (Db)
+        ; We now have our number of iterations!
+        ; Convert to a 16-bit integer
+	rts
+
 RoundPitchAndSave:
         ; Round to nearest, by adding .5 and then
         ;  truncating the fraction off.
@@ -156,7 +205,7 @@ RoundPitchAndSave:
         sta AS_ARG
         sta AS_ARG+1
         
-        ; add it
+        ; add it (Note: ACC must not be zero!!)
         jsr AS_FADDT
         
         jsr AS_AYINT
