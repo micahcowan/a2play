@@ -54,6 +54,8 @@ StrSaved:
 	.word 0
 Octave:
 	.byte $4
+Pitch:
+	.word 0
 AmperPlay:
 	jsr CheckTag
         bcs YesItsUs
@@ -111,9 +113,23 @@ DoNextNote:
         
 	jsr GetNoteBasePitch
         jsr AdjustForOctave
-        jsr PrintFacBytes
-        jsr Mon_CROUT
+        jsr RoundPitchAndSave
+        
+.if 0
+	; Print the saved integer pitch
+        jsr AS_GIVAYF
         jsr AS_PRINT_FAC
+        jsr Mon_CROUT
+        jsr Mon_CROUT
+        lda Pitch
+        jsr Mon_PRBYTE
+        lda #$A0
+        jsr Mon_COUT
+        lda Pitch+1
+        jsr Mon_PRBYTE
+        jsr Mon_CROUT
+        ;jsr AS_PRINT_FAC
+.endif
         
         jsr StrGetNext
         cmp #' '
@@ -125,6 +141,29 @@ DoNextNote:
         cmp #' '
         beq @skipSp
 @exit:
+	rts
+
+RoundPitchAndSave:
+        ; Round to nearest, by adding .5 and then
+        ;  truncating the fraction off.
+        
+        ; load .5 argument
+        lda #$00
+        sta AS_ARG+2
+        sta AS_ARG+3
+        sta AS_ARG+4
+        lda #$80
+        sta AS_ARG
+        sta AS_ARG+1
+        
+        ; add it
+        jsr AS_FADDT
+        
+        jsr AS_AYINT
+        ldy $A1
+        lda $A0
+        sty Pitch
+        sta Pitch+1
 	rts
 
 AdjustForOctave:
@@ -234,12 +273,6 @@ GetNoteBasePitch:
         jsr AS_FDIV
         ldx #0
         stx $A2 ; ensure a positive result
-        .if 0
-        jsr AS_AYINT
-        ldy $A1
-        lda $A0
-        jsr AS_GIVAYF
-        .endif
 	rts
 NoteNameErr:
 	; handle note spec error
