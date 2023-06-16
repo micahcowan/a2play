@@ -56,6 +56,10 @@ StrSaved:
 	.word 0
 StrRemainSaved:
 	.byte 0
+StackSave:
+	.byte 0
+IsRest:
+	.byte 0
 Octave:
 	.byte $4
 Pitch:
@@ -102,15 +106,21 @@ DoNextNote:
 	; Save the current position as the start
         ;  of the note spec, so we can print
         ;  it out later if there's a problem with it.
+        lda #0
+        sta IsRest
 	lda StrSpec
         sta StrSaved
         lda StrSpec+1
         sta StrSaved+1
         lda StrRemain
         sta StrRemainSaved
+        tsx
+        stx StackSave
         
 	jsr StrGetCur
-        beq @done; end of string; done processing!
+        bne :+
+        rts; end of string; done processing!
+:
         
 	jsr GetNoteBasePitch
         jsr AdjustForOctave
@@ -136,11 +146,11 @@ DoNextNote:
         jsr DoSoundLoop
         
         ; Skip to next note spec (or EOS)
-@skipSp:
+SkipSpaces:
 	jsr StrGetNext
         beq @done
         cmp #' '
-        beq @skipSp
+        beq SkipSpaces
 @done:
 	rts
 
@@ -188,8 +198,20 @@ GetDuration:
  	sta Duration,x
         dex
         bne @duW
-        rts
         
+        ; XXX check for triplet
+        
+        ; Check for "dotted"
+        jsr StrGetNext
+        cmp #'.'
+	bne @rewind
+@dotted:
+	; XXX what about dotted triplet?
+	lda #$40
+        sta Duration+1
+        
+        rts
+
 CalcIterations:
 	; What we need: how many sound half-waves to generate
         ; what we have: tempo, note duration, length of
@@ -363,6 +385,14 @@ AdjustAccidental:
 	sbc #0 ; (carry unset; borrow is set)
         rts
 GetNoteBasePitch:
+	cmp #'R'
+        bne @notRest
+        ; We're a rest. Mark that, then pretend we're "C"
+        ;  for S&G.
+        lda #$FF
+        sta IsRest
+        lda #'C'
+@notRest:
         cmp #'H'
         bcs NoteNameErr ; > 'G', bail
         sec
@@ -396,14 +426,17 @@ GetNoteBasePitch:
 	rts
 NoteNameErr:
 	; handle note spec error
-        bit AS_ERRFLG	; ON ERR turned on?
-        bmi @noMsg ; yes; skip our message
+        ;bit AS_ERRFLG	; ON ERR turned on?
+        ;bmi @noMsg ; yes; skip our message
         lda #<MsgBad
         ldy #>MsgBad
         jsr Print
         jsr PrintNoteSpec
+        ; Unwind stack
+        ldx StackSave
+        txs
 @noMsg:
-	jmp AS_SYNERR
+	jmp SkipSpaces
 NoteSteps:
 	; How many steps away from "A" each note
         ;  is. A and B are adjusted up by an
@@ -429,14 +462,14 @@ PrintNoteSpec:
 	; Overwrite overall string ptr
         ; with the one to the current note spec
         lda StrSaved
-        sta $6
+        sta StrSpec
         lda StrSaved+1
-        sta $7
+        sta StrSpec+1
         ldx StrRemainSaved
-        ldy #0
-        inx
+        ldy StrRemain
+        jsr StrRewind
 @lo:
-	dex
+	jsr StrGetNext
         beq @done
         lda ($6),y
         beq @done
@@ -653,6 +686,15 @@ PrepSoundLoop:
         tya
         sta VariableOps,x
         
+        ; handle rest / no rest
+        bit IsRest
+        bne @rest
+        lda #$C0
+        bne @store
+@rest:
+	lda #$20
+@store:
+        sta SpeakerLoc
 	rts
 
 SubIterDivisor:
@@ -669,6 +711,7 @@ DoSoundLoop:
         sta PitchCtr
         lda SubIterations+1
         sta PitchCtr+1
+SpeakerLoc = * + 2
         lda SS_SPKR
         sec
 VariableOps:
