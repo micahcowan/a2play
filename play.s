@@ -44,6 +44,10 @@ HalfStep:
         ; to get the half-wavelength a half-step
         ; above it.
 	.byte $81, $07, $9C, $7C, $96
+AMinuteInCycles:
+	; 60 times the number of CPU cycles per second,
+        ;  or 60 * 1_022_727
+        .byte $9A, $6A, $15, $69, $00
 NoteTypes:
 	.byte "WHQESTX", $00
 MsgBad:
@@ -91,6 +95,7 @@ YesItsUs:
         lda $7
         pha
         jsr PrepNoteStr
+        jsr MaybeTempo
 @loop:
 	jsr DoNextNote
         ; Zero flag is set iff music string has
@@ -101,6 +106,113 @@ YesItsUs:
         pla
         sta $7
         rts
+
+GetIsNumPart:
+	cmp #'.'
+        beq @rts
+        cmp #'0'
+        bcc @rts
+        cmp #('9'+1)
+        bcs @clc
+        sec
+        rts
+@clc:
+	clc
+@rts:
+	rts
+
+MaybeTempo:
+	; Maybe the user specified a tempo at the
+        ; start of the string?
+	lda StrSpec
+        sta StrSaved
+        lda StrSpec+1
+        sta StrSaved+1
+        lda StrRemain
+        sta StrRemainSaved
+        
+        jsr StrGetCur
+        cmp #'T'
+        bne @done
+        
+        jsr StrGetNext
+        jsr GetIsNumPart
+        bcs @isnum ; -->
+        ; Not "T" followed by a number; back up to before T.
+        jsr StrRewind
+@done:
+        rts
+@isnum:
+	; Found T followed by number.
+        ; Save current position
+        lda StrSpec
+        sta AS_INDEX
+        lda StrSpec+1
+        sta AS_INDEX+1
+        
+        ; ...and scan for first non-number
+@scan:
+	jsr StrGetNext
+        jsr GetIsNumPart
+        bcs @scan
+        beq @ok
+        cmp #' '
+        beq @ok
+        bne @restoreSpec ; number didn't end with number char.
+@ok:
+        ; found end of number. Mark it.
+        ldy #0
+        lda (StrSpec),y
+        pha ; PUSH ORIG CHAR
+            lda #0
+            sta (StrSpec),y
+            ; co-opt the BASIC token scanner, to fetch number
+            lda AS_TXTPTR
+            sta AS_STRNG2
+            lda AS_TXTPTR+1
+            sta AS_STRNG2+1
+            lda AS_INDEX
+            sta AS_TXTPTR
+            lda AS_INDEX+1
+            sta AS_TXTPTR+1
+            
+            jsr AS_CHRGOT
+            jsr AS_FIN
+            
+        pla ; restore original char where we found number-end
+        sta (StrSpec),y
+        ; Restore original token buffer
+        lda AS_STRNG2
+        sta AS_TXTPTR
+        lda AS_STRNG2+1
+        sta AS_TXTPTR+1
+        ; We store our tempo as
+        ;  1_022_727 * 60 / (user-specified tempo)
+        ; so do the division
+        lda #<AMinuteInCycles
+        ldy #>AMinuteInCycles
+        jsr AS_FDIV
+        ; ...and store it
+        ldy #5
+@cpy:
+	lda AS_FAC-1,y
+        sta Tempo-1,y
+        dey
+        bne @cpy
+        ; de-negate from FAC
+        lda Tempo+1
+        and #$7F
+        sta Tempo+1
+        
+        jmp SkipSpaces
+@restoreSpec:
+	lda StrRemainSaved
+        sta StrRemain
+        lda StrSaved
+        sta StrSpec
+        lda StrSaved+1
+        sta StrSpec
+        rts ; we'll fail in DoNextNote
 
 DoNextNote:
 	; Save the current position as the start

@@ -16,12 +16,12 @@ FIX_LINE .set LINE_NUMBER
 .elseif 0
 	line "& PLAY,",'"',"C D E F G A B C5",'"'
         scrcode "RUN",$0D
-.elseif 0
-	line "& PLAY,",'"',"GE G- GQ C C GE F E G C5 B4 C5Q",'"'
+.elseif 1
+	line "& PLAY,",'"',"T200 GE G- GQ C C GE F E G C5 B4 C5Q",'"'
         scrcode "RUN",$0D
         scrcode "CALL-151",$0D
 .elseif 1
-	line "& PLAY,",'"',"C4E R G3 R C4 R E R CH. G3E R C4",'"'
+	line "& PLAY,",'"',"T400 C4E R G R C4 R E R CH. G3E R C4",'"'
         scrcode "RUN",$0D
 .endif
 ASoftEnd:
