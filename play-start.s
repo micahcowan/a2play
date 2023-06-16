@@ -3,7 +3,7 @@
 ;#link "play-basic.s"
 ;#link "play.s"
 ;#resource "basic-utils.inc"
-;#resource "play.cfg"
+;#resource "play-8bws.cfg"
 ;#resource "apple2.rom"
 
 
