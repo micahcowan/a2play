@@ -16,7 +16,7 @@ main(void)
         double tone = octStart;
         printf("[%u: %.2f]\n", oct, octStart);
         for (int i=0; i<13; ++i) {
-            printf("(%.2f) %lu : ", tone, (unsigned long)(cpu/tone/2.));
+            printf("(%.2f) %lu : ", tone, (unsigned long)round(cpu/tone/2.));
             tone *= halfStep;
             if (tone > 4200.0) {
                 // Highest tone on a piano is 4186; next up would be

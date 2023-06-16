@@ -26,7 +26,7 @@ MPLAY.TOK: MPLAY.BAS
 	tokenize_asoft < $< > $@ || { rm -f $@; exit 1; }
 
 tones: tones.c
-	gcc -o tones -lm tones.c
+	gcc -o tones tones.c -lm
 	./tones
 
 .s.o:
