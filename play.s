@@ -44,6 +44,8 @@ HalfStep:
         ; to get the half-wavelength a half-step
         ; above it.
 	.byte $81, $07, $9C, $7C, $96
+NoteTypes:
+	.byte "WHQESTX", $00
 MsgBad:
 	scrcode $0D,"?BAD NOTE SPEC: "
         .byte 0
@@ -93,7 +95,7 @@ YesItsUs:
         pla
         sta $7
         pla
-        sta $6
+        sta $7
         rts
 
 DoNextNote:
@@ -108,28 +110,86 @@ DoNextNote:
         sta StrRemainSaved
         
 	jsr StrGetCur
-        beq @exit; end of string; done processing!
+        beq @done; end of string; done processing!
         
 	jsr GetNoteBasePitch
         jsr AdjustForOctave
         jsr RoundToNearestInt
         sty Pitch
         sta Pitch+1
-        ; read optional note duration
+        
+        jsr GetDuration
+        
         jsr CalcIterations
         
+        ; before we play, be sure
+        ; there's no trailing garbage in note spec
+        jsr StrGetNext
+        beq @fine ; end of string; fine.
+        cmp #' '
+        beq @fine ; end of spec; fine.
+@notFine:
+	jmp NoteNameErr
+
+@fine:        
         jsr PrepSoundLoop
         jsr DoSoundLoop
         
         ; Skip to next note spec (or EOS)
 @skipSp:
 	jsr StrGetNext
-        beq @exit
+        beq @done
         cmp #' '
         beq @skipSp
-@exit:
+@done:
 	rts
 
+GetDuration:
+	jsr StrGetNext
+        beq @nevermind
+        cmp #' '
+        beq @rewind
+        ; See if it's one of our recognized letters
+        sta @cmp
+        ldx #0
+@lo:
+	lda NoteTypes,x
+        beq @rewind ; not a note type, rewind
+@cmp = * + 1
+        cmp #$00 ; OVERWRITTEN
+        beq @found
+        inx
+        bne @lo
+@rewind:
+	jsr StrRewind
+@nevermind:
+	rts
+@found:
+	; Rewrite the current duration
+        ; ... If we subtract X-reg from #$83, we have a lovely
+        ; exponent for our new "duration" FP number.
+        ; If we matched "W", x is 0, exp is $83,
+        ; and an empty mantissa yields "4".  If we matched "Q",
+        ; x is 2, exp becomes #$81, and we get "1". Larger
+        ; values of x grant us fractional beats.
+        
+        ; First, negate x-reg
+        txa
+        eor #$FF
+        clc
+        ; now add #$83 (plus also the 1 that
+        ; completes the twos complement negation).
+        ; We've just done equivalent to #$83 - x.
+        adc #$84
+        sta Duration
+        ldx #4
+        lda #0
+ @duW:
+ 	sta Duration,x
+        dex
+        bne @duW
+        rts
+        
 CalcIterations:
 	; What we need: how many sound half-waves to generate
         ; what we have: tempo, note duration, length of
@@ -368,9 +428,9 @@ Print:
 PrintNoteSpec:
 	; Overwrite overall string ptr
         ; with the one to the current note spec
-        lda #<StrSaved
+        lda StrSaved
         sta $6
-        lda #>StrSaved
+        lda StrSaved+1
         sta $7
         ldx StrRemainSaved
         ldy #0
@@ -384,6 +444,7 @@ PrintNoteSpec:
         beq @done
         ora #$80 ; Make it printable
         jsr Mon_COUT
+        iny
         jmp @lo
 @done:
 	rts
