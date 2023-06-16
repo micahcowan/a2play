@@ -34,7 +34,7 @@ BasePitch:
         ; that is an octave below the lowest A note
         ; supported by this program, as measured
         ; in 1.023MHz cycles.
-	.byte $90, $91, $46, $00, $00
+	.byte $90, $11, $46, $00, $00
 HalfStep:
 	; AppleSoft floating-point representation
         ; of 2^(1/12), or 1.0594..., the ratio of
@@ -43,7 +43,7 @@ HalfStep:
         ; Divide a half-wavelength by this number
         ; to get the half-wavelength a half-step
         ; above it.
-	.byte $81, $87, $9C, $7C, $96
+	.byte $81, $07, $9C, $7C, $96
 MsgBad:
 	scrcode $0D,"?BAD NOTE SPEC: "
         .byte 0
@@ -60,11 +60,11 @@ Pitch:
 Tempo:
 	; Stored in "cycles per minute" that a beat takes
         ; Default value is 340,909; equivalent to 180bpm
-        .byte $93, $A6, $75, $A0, $00
+        .byte $93, $26, $75, $A0, $00
 Duration:
 	; Current note duration, in fractions of a beat.
         ; (start with quarter note = 1 beat, so 1).
-        .byte $81, $80, $0, $0, $0
+        .byte $81, $00, $0, $0, $0
 AmperPlay:
 	jsr CheckTag
         bcs YesItsUs
