@@ -52,11 +52,19 @@ StrRemain:
 StrSpec = $6
 StrSaved:
 	.word 0
+StrRemainSaved:
+	.byte 0
 Octave:
 	.byte $4
 Pitch:
 	; Reset for every note. Stored as 16-bit int
+        ;  of how many cycles a half-waveform should take.
+        ; That means it's not really a pitch value; it's
+        ;  proportional to an INVERSE pitch value.
 	.word 0
+Iterations:
+	; Reset for every note. Stored as 16-bit int
+        .word 0
 Tempo:
 	; Stored in "cycles per minute" that a beat takes
         ; Default value is 340,909; equivalent to 180bpm
@@ -77,36 +85,16 @@ YesItsUs:
         lda $7
         pha
         jsr PrepNoteStr
-.if 0
-        lda AS_INDEX+1
-        jsr Mon_PRBYTE
-        lda AS_INDEX
-        jsr Mon_PRBYTE
-        lda #(':' | $80)
-        jsr Mon_COUT
-        lda #$A0
-        jsr Mon_COUT
-        jsr StrGetCur
-@lo:
-        beq @out
-        eor #$80
-        jsr Mon_COUT
-        jsr StrGetNext
-        bne @lo
-@out:
-        lda #$8D
-        jsr Mon_COUT
-        pla
-        sta $7
-        pla
-        sta $6
-	rts
-.endif
 @loop:
 	jsr DoNextNote
         ; Zero flag is set iff music string has
         ;  been consumed.
         bne @loop
+        pla
+        sta $7
+        pla
+        sta $6
+        rts
 
 DoNextNote:
 	; Save the current position as the start
@@ -116,39 +104,27 @@ DoNextNote:
         sta StrSaved
         lda StrSpec+1
         sta StrSaved+1
+        lda StrRemain
+        sta StrRemainSaved
         
 	jsr StrGetCur
         beq @exit; end of string; done processing!
         
 	jsr GetNoteBasePitch
         jsr AdjustForOctave
-        jsr RoundPitchAndSave
+        jsr RoundToNearestInt
+        sty Pitch
+        sta Pitch+1
         ; read optional note duration
         jsr CalcIterations
         
-.if 1
-	; Print the saved integer pitch
-        jsr AS_GIVAYF
-        jsr AS_PRINT_FAC
-        jsr Mon_CROUT
-        lda Pitch
-        jsr Mon_PRBYTE
-        lda #$A0
-        jsr Mon_COUT
-        lda Pitch+1
-        jsr Mon_PRBYTE
-        jsr Mon_CROUT
-        jsr Mon_CROUT
-        ;jsr AS_PRINT_FAC
-.endif
+        jsr PrepSoundLoop
+        jsr DoSoundLoop
         
-        jsr StrGetNext
-        cmp #' '
-        beq @skipSp
-        ; XXX Handle more note spec (octave, duration...)
-        jmp @exit
+        ; Skip to next note spec (or EOS)
 @skipSp:
 	jsr StrGetNext
+        beq @exit
         cmp #' '
         beq @skipSp
 @exit:
@@ -185,16 +161,55 @@ CalcIterations:
         ;   #iter = (duration in beats * a minute in cycles / tempo in beats per minute)
         ;             / (half-wave length in terms of cycles)
         
-        ; Start with Tempo (stored as cycles-per-beat)
-        ; Divide by pitch (half-wave length in cycles)
+        ; Start with pitch (half-wave length in cycles)
+        ldy Pitch
+        lda Pitch+1
+        jsr AS_GIVAYF ; convert int16 to FP
+.if 0
+	; Print the saved integer pitch
+        jsr AS_PRINT_FAC
+        jsr Mon_CROUT
+        lda Pitch
+        jsr Mon_PRBYTE
+        lda #$A0
+        jsr Mon_COUT
+        lda Pitch+1
+        jsr Mon_PRBYTE
+        jsr Mon_CROUT
+        jsr Mon_CROUT
+.endif
+        ldy Pitch
+        lda Pitch+1
+        jsr AS_GIVAYF ; convert int16 to FP
+        ; Divide Tempo (stored as cycles-per-beat) by pitch
+        lda #<Tempo
+        ldy #>Tempo
+        jsr AS_FDIV
         ; Multiply by note duration in beats (Db)
+        lda #<Duration
+        ldy #>Duration
+        jsr AS_FMULT
         ; We now have our number of iterations!
         ; Convert to a 16-bit integer
+        jsr RoundToNearestInt
+        sty Iterations
+        sta Iterations+1
+.if 0
+        tya
+        jsr Mon_PRBYTE
+        lda #$A0
+        jsr Mon_COUT
+        lda Iterations+1
+        jsr Mon_PRBYTE
+        jsr Mon_CROUT
+        jsr Mon_CROUT
+.endif
 	rts
 
-RoundPitchAndSave:
+RoundToNearestInt:
         ; Round to nearest, by adding .5 and then
         ;  truncating the fraction off.
+        ; RETURNS in Y (low) and A (high)
         
         ; load .5 argument
         lda #$00
@@ -211,8 +226,6 @@ RoundPitchAndSave:
         jsr AS_AYINT
         ldy $A1
         lda $A0
-        sty Pitch
-        sta Pitch+1
 	rts
 
 AdjustForOctave:
@@ -320,8 +333,6 @@ GetNoteBasePitch:
         lda #<BasePitch
         ldy #>BasePitch
         jsr AS_FDIV
-        ldx #0
-        stx $A2 ; ensure a positive result
 	rts
 NoteNameErr:
 	; handle note spec error
@@ -355,15 +366,25 @@ Print:
 @done:
 	rts
 PrintNoteSpec:
-	jsr StrGetCur
-        beq @done
+	; Overwrite overall string ptr
+        ; with the one to the current note spec
+        lda #<StrSaved
+        sta $6
+        lda #>StrSaved
+        sta $7
+        ldx StrRemainSaved
+        ldy #0
+        inx
 @lo:
+	dex
+        beq @done
+        lda ($6),y
+        beq @done
         cmp #' '
         beq @done
         ora #$80 ; Make it printable
         jsr Mon_COUT
-        jsr StrGetNext
-        bne @lo
+        jmp @lo
 @done:
 	rts
 
@@ -439,4 +460,183 @@ CheckTag:
         pla
 	sec
         rts
+
+.macro varOps
+	.repeat 17
+        sec ; at least one of these must be preserved
+        .endrepeat
+.endmacro
+;VariableOpsTemplate:
+;	varOps
+;VariableOpsTemplateEnd:
+
+PrepSoundLoop:
+	; Okay, we have the Pitch in terms of
+        ;  "number of cycles" a half-waveform should
+        ;  take up... but we don't infinite granularity
+        ;  in our control over how long it actually takes
+        ;  up.
+        ; We know how to make half-waveforms that
+        ;  are 74 + 27*N + C cycles long. We need to turn
+        ;  Pitch into an N and C that equals the
+        ;  original Pitch value.
         
+        ; Check - is our Pitch lower than we can handle?
+        lda Pitch+1
+        bne @pitchOk
+        lda Pitch
+        cmp #101 ; 101 is the smallest number of cycles
+        	 ;  we can manage
+        bcs @pitchOk
+        ; Set the [inverse] Pitch to the
+        ;  minimum (highest possible actual pitch)
+        lda #101
+        sta Pitch
+        
+@pitchOk:
+        ; First, subtract 74 from Pitch
+        sec
+        lda Pitch
+        sbc #76
+        sta Pitch
+        sta SubIterations
+        lda Pitch+1
+        sbc #0 ; for borrow
+        sta Pitch+1
+        sta SubIterations+1
+        
+        ; Now divide that by 27
+        ldy SubIterations
+        jsr AS_GIVAYF
+        lda #$80
+        sta $A2
+        lda #AS_FAC
+        ldy #00
+        jsr AS_LOAD_ARG_FROM_YA
+        lda #<SubIterDivisor
+        ldy #>SubIterDivisor
+        jsr AS_LOAD_FAC_FROM_YA
+        jsr AS_FDIVT
+        
+        ; That's our "N".
+        ; Convert to int and store in SubIterations
+        jsr AS_AYINT
+        lda $A0
+        sta SubIterations+1
+        lda $A1
+        sta SubIterations
+        .if 0
+        jsr Mon_PRBYTE
+        lda #$A0
+        jsr Mon_COUT
+        lda SubIterations+1
+        jsr Mon_PRBYTE
+        lda #$A0
+        jsr Mon_COUT
+        .endif
+        
+        ; We interrupt this program to initialize VariableOps.
+	ldx #0
+@voInitLo:
+	lda #$38 ; fill it with SEC ops to start
+        sta VariableOps,x
+        inx
+        cpx #(VariableOpsEnd - VariableOps)
+        bne @voInitLo
+        
+        ; Convert back to float and multiply by 27
+        ldy SubIterations
+        lda SubIterations+1
+        jsr AS_GIVAYF
+        lda #<SubIterDivisor
+        ldy #>SubIterDivisor
+        jsr AS_FMULT
+        jsr AS_AYINT
+        ; Now to get the "remainder", we can subtract
+        ;  from the original dividend
+        ;  (we can ignore the high bytes)
+        lda Pitch
+        sec
+        sbc $A1
+        ; that's our "C". Trim the VariableOps region
+        ; accordingly!
+        lsr
+        tax
+        inx ; skip first (mandatory) SEC
+        bcc @tail ; C was even
+        ; C was odd. Replace first SEC in VariableOps
+        ; with (no-op) BCS
+        dex
+        lda #$B0
+        sta VariableOps,x
+        inx
+        lda #$00
+        sta VariableOps,x
+        inx
+@tail:
+	lda #$B0
+        sta VariableOps,x
+        inx
+        txa
+        pha
+        ; Negate it
+        eor #$FF
+        clc
+        adc #1
+        ; to subtract from the end
+        clc
+        adc #(VariableOpsEnd-VariableOps-1) ; -1 to account for diff between X, and PC when it obeys this 
+        tay
+        pla
+        tax
+        tya
+        sta VariableOps,x
+        
+	rts
+
+SubIterDivisor:
+	.byte $85, $58, 0, 0, 0 ; 27.0
+
+.align 256 ; helps ensure timing
+SubIterations:
+	.word 0
+PitchCtr:
+	.word 0
+DoSoundLoop:
+	; following four ops total 16 cycles
+	lda SubIterations
+        sta PitchCtr
+        lda SubIterations+1
+        sta PitchCtr+1
+        lda SS_SPKR
+        sec
+VariableOps:
+	varOps
+VariableOpsEnd:
+@halfWave:
+	sec			; 2
+        lda PitchCtr		; +4 = 6
+        sbc #1			; +2 = 8
+        sta PitchCtr		; +4 = 12
+        lda PitchCtr+1		; +4 = 16
+        sbc #0			; +2 = 18
+        sta PitchCtr+1		; +4 = 22
+        cmp #$ff		; +2 = 24
+        bne @halfWave		; +3 = 27
+        ; ^ Does Pitch+1 iterations
+        sec			; 2
+ 	lda Iterations		; +4 = 6
+        sbc #1			; +2 = 8
+        sta Iterations		; +4 = 12
+        lda Iterations+1	; +4 = 16
+        sbc #0 ; for borrow	; +2 = 18
+        sta Iterations+1	; +4 = 22
+        cmp #$ff		; +2 = 24
+        bne DoSoundLoop		; +3 = 27
+        ; ^ Does iter+1 iterations
+        ; ea. iter = (26 + 27 + 20 + 3 + 4 = 76) + (Pitch * 27) + C cycles
+        ;    (3 for req'd varOps branch, 4 for 1 req'd varOps sec, 1 req'd sec-or-bcc (for C's odd bit)
+        ; PrepSoundLoop needs to re-adjust Pitch so the total equals
+        ; the desired value of *cycles*, rather than iterations
+        ; in the "halfWave" loop
+	rts

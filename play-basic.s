@@ -4,6 +4,7 @@
 
 ASoftProg:
 	lineP "PLAYING MUSIC..."
+.if 0
         line "A$ = ",'"',"A# ",'"'
         line "Q$ = ",'"',"Q ",'"'
         line "& PLAYE, A$+",'"',"C",'"',": ?",'"',"REST",'"'
@@ -12,4 +13,7 @@ FIX_LINE .set LINE_NUMBER
         lineP "AFTER"
         scrcode "RUN", $0D
         scrcode "Q$=",'"','"',":GOTO ",.sprintf("%d",FIX_LINE),$0D
+.endif
+	line "& PLAY,",'"',"C D E F G A B C5",'"'
+        scrcode "RUN",$0D
 ASoftEnd:
