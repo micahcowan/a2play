@@ -153,9 +153,9 @@ MaybeTempo:
         ; ...and scan for first non-number
 @scan:
 	jsr StrGetNext
+        beq @ok
         jsr GetIsNumPart
         bcs @scan
-        beq @ok
         cmp #' '
         beq @ok
         bne @restoreSpec ; number didn't end with number char.

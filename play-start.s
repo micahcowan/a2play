@@ -1,4 +1,4 @@
-;#define CFGFILE play.cfg
+;#define CFGFILE play-8bws.cfg
 ;#link "load-and-run-asoft-basic.s"
 ;#link "play-basic.s"
 ;#link "play.s"
