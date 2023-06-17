@@ -1,0 +1,4 @@
+*.o
+PLAY.BIN
+PLAY.dsk
+basic/*.tok
