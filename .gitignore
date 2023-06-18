@@ -1,4 +1,9 @@
 *.o
 PLAY.BIN
+PLAY.BIN#068000
+PDPLAY.BIN
 PLAY.dsk
+PLAY-PRODOS.po
 basic/*.tok
+basic/*.tok.pd
+basic/*#FC0801

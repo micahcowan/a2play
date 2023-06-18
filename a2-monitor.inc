@@ -42,6 +42,8 @@ Mon_MONZ	= $FF69
 
 AS_INDEX	= $5E
 AS_DEST		= $60
+AS_FRETOP       = $6F
+AS_MEMSIZE      = $73
 AS_FAC		= $9D
 AS_ARG		= $A5
 AS_STRNG2	= $AD

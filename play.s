@@ -4,7 +4,48 @@
 
 .export InstallAmperPlay
 
+PRODOS_GETBUFR = $BEF5
+
 InstallAmperPlay:
+.ifdef PRODOS
+        lda #$1
+        jsr PRODOS_GETBUFR
+        bcc @good
+@prMsg:
+        ldy #0
+@lo:
+        lda @MemErrMsg,y
+        beq @msgDone
+        jsr Mon_COUT
+        iny
+        bne @prMsg
+@msgDone:
+        rts
+@MemErrMsg:
+        scrcode "COULDN'T PROTECT MEMORY! NOT INSTALLING.",$0D
+        .byte $0
+@good:
+        ; Was BASIC.SYSTEM memory already intruding into ours?
+        ; (accum has newly-allocated page)
+        clc
+        adc #1
+        cmp #>ProgramEnd
+        bcc @prMsg ; we already installed over a buffer... oops!
+        sbc #(1 + >InstallAmperPlay) ; carry is set (no borrow).
+        jsr PRODOS_GETBUFR ; allocate enough to protect ourself
+        bcs @prMsg
+        cmp #>InstallAmperPlay
+        bne @msgDone
+.else
+        ; Set HIMEM below us
+        lda #<InstallAmperPlay
+        sta AS_MEMSIZE
+        sta AS_FRETOP
+        lda #>InstallAmperPlay
+        sta AS_MEMSIZE+1
+        sta AS_FRETOP+1
+.endif
+@saveHandler:
 	; Save any existing & handler
         ldy #0
 @cpyAmp:
@@ -856,3 +897,5 @@ VariableOpsEnd:
         ; the desired value of *cycles*, rather than iterations
         ; in the "halfWave" loop
 	rts
+
+ProgramEnd:
