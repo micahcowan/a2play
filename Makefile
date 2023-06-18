@@ -4,6 +4,7 @@ LD=ld65
 BASIC_FILES:=$(wildcard basic/*.bas)
 TOKENIZED_FILES:=$(shell echo $(subst .bas,.tok,$(BASIC_FILES)))
 
+.PHONY: all
 all: PLAY.dsk PLAY-PRODOS.po
 # Convenience to copy to where my emulator will find it
 ifdef PLAYCOPY
@@ -50,3 +51,7 @@ PLAY.BIN\#068000: pdplay.o play.cfg
 
 pdplay.o: play.s
 	ca65 -DPRODOS -o $@ $<
+
+.PHONY: clean
+clean:
+	rm -f *.o PLAY.BIN PLAY.BIN\#068000 PDPLAY.BIN PLAY.dsk PLAY-PRODOS.po basic/*.tok basic/*.tok.pd basic/*\#FC0801
