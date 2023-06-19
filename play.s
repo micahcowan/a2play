@@ -4,11 +4,14 @@
 
 .export InstallAmperPlay
 
+PRODOS_FREEBUFR = $BEF8
 PRODOS_GETBUFR = $BEF5
+PRODOS_START = $9A00
 
 InstallAmperPlay:
 .ifdef PRODOS
-        lda #$1
+        jsr PRODOS_FREEBUFR
+        lda #(>PRODOS_START - >InstallAmperPlay)
         jsr PRODOS_GETBUFR
         bcc @good
 @prMsg:
@@ -18,22 +21,13 @@ InstallAmperPlay:
         beq @msgDone
         jsr Mon_COUT
         iny
-        bne @prMsg
+        bne @lo
 @msgDone:
         rts
 @MemErrMsg:
         scrcode "COULDN'T PROTECT MEMORY! NOT INSTALLING.",$0D
         .byte $0
 @good:
-        ; Was BASIC.SYSTEM memory already intruding into ours?
-        ; (accum has newly-allocated page)
-        clc
-        adc #1
-        cmp #>ProgramEnd
-        bcc @prMsg ; we already installed over a buffer... oops!
-        sbc #(1 + >InstallAmperPlay) ; carry is set (no borrow).
-        jsr PRODOS_GETBUFR ; allocate enough to protect ourself
-        bcs @prMsg
         cmp #>InstallAmperPlay
         bne @msgDone
 .else
@@ -45,6 +39,9 @@ InstallAmperPlay:
         sta AS_MEMSIZE+1
         sta AS_FRETOP+1
 .endif
+.if 0
+        ;; ONLY DO THIS IF WE'RE CHAINING
+        ;; OTHERWISE WE'LL INFLOOP IF WE'RE LOADED TWICE
 @saveHandler:
 	; Save any existing & handler
         ldy #0
@@ -54,6 +51,7 @@ InstallAmperPlay:
         iny
         cpy #3
         bne @cpyAmp
+.endif
 	; Install our handler
 	lda #$4c
         sta AS_AMP
@@ -64,7 +62,8 @@ InstallAmperPlay:
 	rts
 
 NextAmper:
-	.byte $4C, $00, $00
+	.byte $60, 0, 0
+	;.byte $4C, $00, $00
 PlayTag:
 	.byte "PLAY,"
         .byte $00

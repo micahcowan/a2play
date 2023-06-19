@@ -1,4 +1,5 @@
 *.o
+*.lst
 PLAY.BIN
 PLAY.BIN#068000
 PDPLAY.BIN

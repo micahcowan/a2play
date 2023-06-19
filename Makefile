@@ -50,7 +50,7 @@ PLAY.BIN\#068000: pdplay.o play.cfg
 	ld65 --config play.cfg -o $@ pdplay.o
 
 pdplay.o: play.s
-	ca65 -DPRODOS -o $@ $<
+	ca65 -DPRODOS --listing play-prodos.lst -o $@ $<
 
 .PHONY: clean
 clean:
