@@ -84,10 +84,14 @@ BasePitches:
         .word 26297, 24821, 23428
         ;     F#, G, G#
         .word 22113, 20872, 19701
-AMinuteInCycles:
-	; 60 times the number of CPU cycles per second,
-        ;  or 60 * 1_022_727
-        .byte $9A, $6A, $15, $69, $00
+OneBpmWholeNote:
+	; 4 * 60, times the number of CPU cycles per second,
+        ;  or 4 * 60 * 1_022_727
+        ; Represents the length in CPU cycles of a
+        ;  whole note at 1 bpm
+        ; Stored as a big-endian 32-bit unsigned int
+        ;  (like Tempo, Duration)
+        .byte $0E, $A1, $56, $90
 NoteTypes:
 	.byte "WHQESTX", $00
 MsgBad:
@@ -107,22 +111,25 @@ IsRest:
 Octave:
 	.byte $4
 Pitch:
-	; Reset for every note. Stored as BE 16-bit int
+	; Reset for every note. Stored as BE 16-bit uint
         ;  of how many cycles a half-waveform should take.
         ; That means it's not really a pitch value; it's
         ;  proportional to an INVERSE pitch value.
 	.word 0
 Iterations:
-	; Reset for every note. Stored as 16-bit int
+	; Reset for every note. Stored as BE 16-bit uint
         .word 0
 Tempo:
-	; Stored in "cycles per minute" that a beat takes
+	; Stored in "cycles per minute" that a beat takes,
+        ;  as a big-endian 32-bit unsigned int.
         ; Default value is 340,909; equivalent to 180bpm
-        .byte $93, $26, $75, $A0, $00
+        .byte $00, $05, $33, $AD
 Duration:
-	; Current note duration, in fractions of a beat.
-        ; (start with quarter note = 1 beat, so 1).
-        .byte $81, $00, $0, $0, $0
+	; Current note duration, same format as Tempo:
+        ;  "cycles per minute" that a beat takes.
+        ; Default same as Tempo, since default note
+        ;  length is a quarter note (one beat)
+        .byte $00, $05, $33, $AD
 AmperPlay:
 	jsr CheckTag
         bcs YesItsUs
@@ -226,23 +233,38 @@ MaybeTempo:
         sta AS_TXTPTR
         lda AS_STRNG2+1
         sta AS_TXTPTR+1
-        ; We store our tempo as
-        ;  1_022_727 * 60 / (user-specified tempo)
-        ; so do the division
-        lda #<AMinuteInCycles
-        ldy #>AMinuteInCycles
-        jsr AS_FDIV
-        ; ...and store it
-        ldy #5
-@cpy:
-	lda AS_FAC-1,y
-        sta Tempo-1,y
-        dey
-        bne @cpy
-        ; de-negate from FAC
-        lda Tempo+1
-        and #$7F
-        sta Tempo+1
+        
+        ; Convert the result to an integer and arrange
+        ;  as integer divisor
+        jsr AS_AYINT
+        lda $A0 ; high-order byte
+        sta locDivisor+2
+        lda $A1 ; low-order byte
+        sta locDivisor+3
+        lda #0
+        sta locDivisor
+        sta locDivisor+1
+        
+        ; Use a minute in cycles as the dividend
+        ldx #4
+@dendCpy:
+        lda OneBpmWholeNote-1,x
+        sta locDividend-1,x
+        dex
+        bne @dendCpy
+        
+        ; result: duration of a beat, in # cycles
+        jsr div32
+        
+        ; copy to Tempo and Duration (reset to quarter-note)
+        ldx #4
+@quotCpy:
+	lda locQuotient-1,x
+        sta Tempo-1,x
+        dex
+        bne @quotCpy
+        ldx #2 ; quarter-note
+        jsr CalcDuration
         
         jmp SkipSpaces
 @restoreSpec:
@@ -316,48 +338,69 @@ GetDuration:
         beq @rewind ; not a note type, rewind
 @cmp = * + 1
         cmp #$00 ; OVERWRITTEN
-        beq @found
+        beq CalcDuration
         inx
         bne @lo
 @rewind:
 	jsr StrRewind
 @nevermind:
 	rts
-@found:
-	; Rewrite the current duration
-        ; ... If we subtract X-reg from #$83, we have a lovely
-        ; exponent for our new "duration" FP number.
-        ; If we matched "W", x is 0, exp is $83,
-        ; and an empty mantissa yields "4".  If we matched "Q",
-        ; x is 2, exp becomes #$81, and we get "1". Larger
-        ; values of x grant us fractional beats.
+CalcDuration:
+	; Copy Tempo to Duration, and shift until we get our
+        ;  duration.
+        ldy #4
+@cpyTempo:
+	lda Tempo-1,y
+        sta Duration-1,y
+        dey
+        bne @cpyTempo
         
-        ; First, negate x-reg
-        txa
-        eor #$FF
-        clc
-        ; now add #$83 (plus also the 1 that
-        ; completes the twos complement negation).
-        ; We've just done equivalent to #$83 - x.
-        adc #$84
-        sta Duration
-        ldx #4
-        lda #0
- @duW:
- 	sta Duration,x
+        ; If we matched "W", x is 0, so we do no shifting,
+        ;  as Tempo is already the duration of a whole note
+        ; If we matched "Q", x is 2, so we shift twice
+        ;  (divide by 4), giving us the duration of
+        ;  a quarter note
+        cpx #0
+        beq @durShiftDone
+@durShiftLoop:
+	lsr Duration
+        ror Duration+1
+        ror Duration+2
+        ror Duration+3
         dex
-        bne @duW
+        bne @durShiftLoop
+@durShiftDone:
         
         ; XXX check for triplet
         
         ; Check for "dotted"
         jsr StrGetNext
         cmp #'.'
-	bne @rewind
+        beq @dotted
+	jmp StrRewind
 @dotted:
 	; XXX what about dotted triplet?
-	lda #$40
-        sta Duration+1
+	; Halve the duration (value of just the dot)
+        ;  and push result to stack
+        ldx #0
+        clc
+@halveShift:
+	lda Duration,x
+        ror
+        pha
+        inx
+        cpx #4
+        bne @halveShift
+        
+        ; Now add it back to itself (= dotted value)
+        ldx #3
+        clc
+@dottedAdd:
+	pla ; the first of these is spurious...
+        adc Duration,x
+        sta Duration,x
+        dex
+        bpl @dottedAdd
         
         rts
 
@@ -392,45 +435,35 @@ CalcIterations:
         ;   #iter = (duration in beats * a minute in cycles / tempo in beats per minute)
         ;             / (half-wave length in terms of cycles)
         
-        ; Start with pitch (half-wave length in cycles)
+        ; Divide Duration (length of note in cycles)
+        ; by Pitch (length of a half-wave in cycles)
+        ; to get # of iterations (number of times to
+        ;   produce a half-wave until we've reached note length)
+
+	; Copy Pitch as divisor
+        lda #0
+        sta locDivisor
+        sta locDivisor+1
         lda Pitch
         ldy Pitch+1
-        jsr AS_GIVAYF ; convert int16 to FP
-        ; Divide Tempo (stored as cycles-per-beat) by pitch
-        lda #<Tempo
-        ldy #>Tempo
-        jsr AS_FDIV
-        ; Multiply by note duration in beats (Db)
-        lda #<Duration
-        ldy #>Duration
-        jsr AS_FMULT
-        ; We now have our number of iterations!
-        ; Convert to a 16-bit integer
-        jsr RoundToNearestInt
+        sta locDivisor+2
+        sty locDivisor+3
+        
+        ; Now copy Duration as dividend
+        ldx #3
+@copyDur:
+	lda Duration,x
+        sta locDividend,x
+        dex
+        bpl @copyDur
+        
+        jsr div32 ; divide!
+        
+        ; Copy lower 16 bits of result to Iterations
+        ldy locQuotient+2
+        lda locQuotient+3
         sty Iterations
         sta Iterations+1
-	rts
-
-RoundToNearestInt:
-        ; Round to nearest, by adding .5 and then
-        ;  truncating the fraction off.
-        ; RETURNS in Y (low) and A (high)
-        
-        ; load .5 argument
-        lda #$00
-        sta AS_ARG+2
-        sta AS_ARG+3
-        sta AS_ARG+4
-        lda #$80
-        sta AS_ARG
-        sta AS_ARG+1
-        
-        ; add it (Note: ACC must not be zero!!)
-        jsr AS_FADDT
-        
-        jsr AS_AYINT
-        ldy $A1
-        lda $A0
 	rts
 
 AdjustForOctave:
@@ -461,19 +494,6 @@ TryReadOctave:
         rts
 @notOct:
 	jsr StrRewind
-	rts
-
-PrintFacBytes:
-	ldx #0
-:
-	lda AS_FAC, x
-        jsr Mon_PRBYTE
-        lda #$A0
-        jsr Mon_COUT
-        inx
-        cpx #5
-        bne :-
-        jsr Mon_CROUT
 	rts
 
 Accidentals:
@@ -681,7 +701,7 @@ CheckTag:
 PrepSoundLoop:
 	; Okay, we have the Pitch in terms of
         ;  "number of cycles" a half-waveform should
-        ;  take up... but we don't infinite granularity
+        ;  take up... but we don't have infinite granularity
         ;  in our control over how long it actually takes
         ;  up.
         ; We know how to make half-waveforms that
@@ -702,46 +722,33 @@ PrepSoundLoop:
         sta Pitch+1
         
 @pitchOk:
-        ; First, subtract 74 from Pitch
+        ; First, subtract 76 from Pitch
         sec
         lda Pitch+1
         sbc #76
-        sta Pitch+1
-        sta SubIterations
+        sta SubIterations+1
         lda Pitch
         sbc #0 ; for borrow
-        sta Pitch
-        sta SubIterations+1
+        sta SubIterations
         
         ; Now divide that by 27
-        ldy SubIterations
-        jsr AS_GIVAYF
-        lda #$80
-        sta $A2
-        lda #AS_FAC
-        ldy #00
-        jsr AS_LOAD_ARG_FROM_YA
-        lda #<SubIterDivisor
-        ldy #>SubIterDivisor
-        jsr AS_LOAD_FAC_FROM_YA
-        jsr AS_FDIVT
+        lda SubIterations
+        ldy SubIterations+1
+        sta locDividend
+        sty locDividend+1
+        lda #0
+        ldy #27
+        sta locDivisor
+        sty locDivisor+1
+        
+        jsr div16
         
         ; That's our "N".
         ; Convert to int and store in SubIterations
-        jsr AS_AYINT
-        lda $A0
-        sta SubIterations+1
-        lda $A1
+        lda locQuotient
+        ldy locQuotient+1
         sta SubIterations
-        .if 0
-        jsr Mon_PRBYTE
-        lda #$A0
-        jsr Mon_COUT
-        lda SubIterations+1
-        jsr Mon_PRBYTE
-        lda #$A0
-        jsr Mon_COUT
-        .endif
+        sty SubIterations+1
         
         ; We interrupt this program to initialize VariableOps.
 	ldx #0
@@ -752,22 +759,11 @@ PrepSoundLoop:
         cpx #(VariableOpsEnd - VariableOps)
         bne @voInitLo
         
-        ; Convert back to float and multiply by 27
-        ldy SubIterations
-        lda SubIterations+1
-        jsr AS_GIVAYF
-        lda #<SubIterDivisor
-        ldy #>SubIterDivisor
-        jsr AS_FMULT
-        jsr AS_AYINT
-        ; Now to get the "remainder", we can subtract
-        ;  from the original dividend
-        ;  (we can ignore the high bytes)
-        lda Pitch+1
-        sec
-        sbc $A1
+        ; Load remainder from division (guaranteed 1 byte) -
         ; that's our "C". Trim the VariableOps region
-        ; accordingly!
+        ; accordingly.
+        lda locRemainder+1
+        ;
         lsr
         tax
         inx ; skip first (mandatory) SEC
@@ -821,10 +817,10 @@ PitchCtr:
 	.word 0
 DoSoundLoop:
 	; following four ops total 16 cycles
-	lda SubIterations
-        sta PitchCtr
-        lda SubIterations+1
+	lda SubIterations+1
         sta PitchCtr+1
+        lda SubIterations
+        sta PitchCtr
 SpeakerLoc = * + 2
         lda SS_SPKR
         sec
@@ -833,22 +829,22 @@ VariableOps:
 VariableOpsEnd:
 @halfWave:
 	sec			; 2
-        lda PitchCtr		; +4 = 6
+        lda PitchCtr+1		; +4 = 6
         sbc #1			; +2 = 8
-        sta PitchCtr		; +4 = 12
-        lda PitchCtr+1		; +4 = 16
+        sta PitchCtr+1		; +4 = 12
+        lda PitchCtr		; +4 = 16
         sbc #0			; +2 = 18
-        sta PitchCtr+1		; +4 = 22
+        sta PitchCtr		; +4 = 22
         cmp #$ff		; +2 = 24
         bne @halfWave		; +3 = 27
         ; ^ Does Pitch+1 iterations
         sec			; 2
- 	lda Iterations		; +4 = 6
+ 	lda Iterations+1	; +4 = 6
         sbc #1			; +2 = 8
-        sta Iterations		; +4 = 12
-        lda Iterations+1	; +4 = 16
+        sta Iterations+1	; +4 = 12
+        lda Iterations		; +4 = 16
         sbc #0 ; for borrow	; +2 = 18
-        sta Iterations+1	; +4 = 22
+        sta Iterations		; +4 = 22
         cmp #$ff		; +2 = 24
         bne DoSoundLoop		; +3 = 27
         ; ^ Does iter+1 iterations
@@ -858,5 +854,10 @@ VariableOpsEnd:
         ; the desired value of *cycles*, rather than iterations
         ; in the "halfWave" loop
 	rts
+
+div32:
+	makeDivisionRoutine 4
+div16:
+	makeDivisionRoutine 2
 
 ProgramEnd:
