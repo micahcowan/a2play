@@ -1,4 +1,6 @@
 .include "a2-monitor.inc"
+
+DIVISION_WORK_AREA=divisionWorkArea
 .include "division.inc"
 
 .macpack apple2
@@ -855,6 +857,8 @@ VariableOpsEnd:
         ; in the "halfWave" loop
 	rts
 
+divisionWorkArea:
+	.res 20
 div32:
 	makeDivisionRoutine 4
 div16:

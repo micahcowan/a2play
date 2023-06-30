@@ -17,6 +17,15 @@ FIX_LINE .set LINE_NUMBER
 	line "& PLAY,",'"',"C D E F G A B C5",'"'
         scrcode "RUN",$0D
 .elseif 1
+	; Major scales test
+        lineP "MAJOR SCALES IN C"
+        line "& PLAY,",'"',"T180",'"',": REM SET TEMPO"
+        line "FOR OCTAVE=2 TO 6"
+        line "& PLAY,",'"',"C",'"'," + STR$(OCTAVE) + ",'"',"E D E F G A B",'"'
+        line "NEXT OCTAVE"
+        line "& PLAY,",'"',"C7",'"'
+        scrcode "RUN",$0D
+.elseif 1
 	; Sailor's hornpipe
 	line "& PLAY,",'"',"T280"
         line "& PLAY,",'"',"GE G- GQ C C GE F E G C5 B4 C5Q",'"'

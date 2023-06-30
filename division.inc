@@ -1,12 +1,16 @@
 .ifndef MATH_DIVISION_
 MATH_DIVISION_ = 1
 
-locDividend   .set $9D
-locDivisor    .set $A1
-locQuotient   .set $A5
-locRemainder  .set $A9
-whichQuotByte .set locRemainder + 4
-quotShift     .set whichQuotByte + 1
+.ifndef DIVISION_WORK_AREA
+DIVISION_WORK_AREA = $9D
+.endif
+
+locDividend   = DIVISION_WORK_AREA
+locDivisor    = locDividend + 4
+locQuotient   = locDivisor + 4
+locRemainder  = locQuotient + 4
+whichQuotByte = locRemainder + 4
+quotShift     = whichQuotByte + 1
 
 .macro makeDivisionRoutine BYTES
 .scope
