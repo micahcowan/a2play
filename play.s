@@ -107,7 +107,7 @@ IsRest:
 Octave:
 	.byte $4
 Pitch:
-	; Reset for every note. Stored as 16-bit int
+	; Reset for every note. Stored as BE 16-bit int
         ;  of how many cycles a half-waveform should take.
         ; That means it's not really a pitch value; it's
         ;  proportional to an INVERSE pitch value.
@@ -393,24 +393,8 @@ CalcIterations:
         ;             / (half-wave length in terms of cycles)
         
         ; Start with pitch (half-wave length in cycles)
-        ldy Pitch
-        lda Pitch+1
-        jsr AS_GIVAYF ; convert int16 to FP
-.if 0
-	; Print the saved integer pitch
-        jsr AS_PRINT_FAC
-        jsr Mon_CROUT
         lda Pitch
-        jsr Mon_PRBYTE
-        lda #$A0
-        jsr Mon_COUT
-        lda Pitch+1
-        jsr Mon_PRBYTE
-        jsr Mon_CROUT
-        jsr Mon_CROUT
-.endif
-        ldy Pitch
-        lda Pitch+1
+        ldy Pitch+1
         jsr AS_GIVAYF ; convert int16 to FP
         ; Divide Tempo (stored as cycles-per-beat) by pitch
         lda #<Tempo
@@ -425,16 +409,6 @@ CalcIterations:
         jsr RoundToNearestInt
         sty Iterations
         sta Iterations+1
-.if 0
-        tya
-        jsr Mon_PRBYTE
-        lda #$A0
-        jsr Mon_COUT
-        lda Iterations+1
-        jsr Mon_PRBYTE
-        jsr Mon_CROUT
-        jsr Mon_CROUT
-.endif
 	rts
 
 RoundToNearestInt:
@@ -466,8 +440,8 @@ AdjustForOctave:
         ldx Octave
         beq @doneShift
 @shift:
-	lsr Pitch+1
-        ror Pitch
+	lsr Pitch
+        ror Pitch+1
         dex
         bne @shift
 @doneShift:
@@ -565,10 +539,10 @@ GetNoteBasePitch:
         asl
         tay
         lda BasePitches,y
-        sta Pitch
+        sta Pitch+1
         iny
         lda BasePitches,y
-        sta Pitch+1
+        sta Pitch
 	rts
 NoteNameErr:
 	; handle note spec error
@@ -716,27 +690,27 @@ PrepSoundLoop:
         ;  original Pitch value.
         
         ; Check - is our Pitch lower than we can handle?
-        lda Pitch+1
-        bne @pitchOk
         lda Pitch
+        bne @pitchOk
+        lda Pitch+1
         cmp #101 ; 101 is the smallest number of cycles
         	 ;  we can manage
         bcs @pitchOk
         ; Set the [inverse] Pitch to the
         ;  minimum (highest possible actual pitch)
         lda #101
-        sta Pitch
+        sta Pitch+1
         
 @pitchOk:
         ; First, subtract 74 from Pitch
         sec
-        lda Pitch
-        sbc #76
-        sta Pitch
-        sta SubIterations
         lda Pitch+1
-        sbc #0 ; for borrow
+        sbc #76
         sta Pitch+1
+        sta SubIterations
+        lda Pitch
+        sbc #0 ; for borrow
+        sta Pitch
         sta SubIterations+1
         
         ; Now divide that by 27
@@ -789,7 +763,7 @@ PrepSoundLoop:
         ; Now to get the "remainder", we can subtract
         ;  from the original dividend
         ;  (we can ignore the high bytes)
-        lda Pitch
+        lda Pitch+1
         sec
         sbc $A1
         ; that's our "C". Trim the VariableOps region
