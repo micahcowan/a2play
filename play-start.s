@@ -5,6 +5,7 @@
 ;#resource "basic-utils.inc"
 ;#resource "play-8bws.cfg"
 ;#resource "apple2.rom"
+;#resource "division.inc"
 
 
 .macpack apple2

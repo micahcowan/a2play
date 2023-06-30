@@ -1,4 +1,5 @@
 .include "a2-monitor.inc"
+.include "division.inc"
 
 .macpack apple2
 
@@ -67,23 +68,22 @@ NextAmper:
 PlayTag:
 	.byte "PLAY,"
         .byte $00
-BasePitch:
-	; AppleSoft floating-point representation
-        ; of the number 37190, the length of
-        ; one-half of the waveform of the A note
-        ; that is an octave below the lowest A note
-        ; supported by this program, as measured
-        ; in 1.023MHz cycles.
-	.byte $90, $11, $46, $00, $00
-HalfStep:
-	; AppleSoft floating-point representation
-        ; of 2^(1/12), or 1.0594..., the ratio of
-        ; the frequency of one musical note, to
-        ; the note a half-step below it.
-        ; Divide a half-wavelength by this number
-        ; to get the half-wavelength a half-step
-        ; above it.
-	.byte $81, $07, $9C, $7C, $96
+NoteSteps:
+	; How many steps away from "A" each note
+        ;  is. A and B are adjusted up by an
+        ;  octave, so that octaves "start" at C
+        ;  and not A.
+	.byte 0,2,3,5,7,8,10
+BasePitches:
+	;     A, A#, B
+	.word 18595, 17551, 16566
+        ;     C, C#, D   [drop down: 8ve starts at "C",
+        ;                 but lookup starts at "A"]
+        .word 31273, 29518, 27861
+        ;     D#, E, F
+        .word 26297, 24821, 23428
+        ;     F#, G, G#
+        .word 22113, 20872, 19701
 AMinuteInCycles:
 	; 60 times the number of CPU cycles per second,
         ;  or 60 * 1_022_727
@@ -276,9 +276,6 @@ DoNextNote:
         
 	jsr GetNoteBasePitch
         jsr AdjustForOctave
-        jsr RoundToNearestInt
-        sty Pitch
-        sta Pitch+1
         
         jsr GetDuration
         
@@ -464,14 +461,16 @@ RoundToNearestInt:
 
 AdjustForOctave:
 	jsr TryReadOctave
-        ; We want to divide the pitch by 2 for
-        ;  each octave above 0. The simplest way
-        ;  to do that is just to subtract the octave #
-        ;  from the FP number's exponent byte!
-        lda AS_FAC
-        sec
-        sbc Octave
-        sta AS_FAC
+        ; Divide the pitch by 2 (shift right) for
+        ;  each octave above 0.
+        ldx Octave
+        beq @doneShift
+@shift:
+	lsr Pitch+1
+        ror Pitch
+        dex
+        bne @shift
+@doneShift:
 	rts
 
 TryReadOctave:
@@ -532,9 +531,14 @@ AdjustAccidental:
         bcc @flat
         ; sharp
         adc #0 ; (carry is set)
+        ; did we exceed 
 	rts
 @flat:	; flat
+	beq @wrap ; is our base note A? yes -> deal with wrap
 	sbc #0 ; (carry unset; borrow is set)
+        rts
+@wrap:
+	lda #11 ; base note was A (0), flat is Ab (11)
         rts
 GetNoteBasePitch:
 	cmp #'R'
@@ -555,26 +559,16 @@ GetNoteBasePitch:
         
         jsr AdjustAccidental
         
-        ; We have N, we want HalfStep^N.
-        
-        ; First, convert our integer exponent
-        ;  into floating-point
+        ; At this point, we have our 12-step index
+        ;  for the note.
+        ; We're indexing words, not bytes, so double it
+        asl
         tay
-        lda #0
-        jsr AS_GIVAYF
-        ; Get pointer to HalfStep into A, Y
-        ; ...and do the exponentiation (^)
-        lda #<HalfStep
-        ldy #>HalfStep
-        jsr AS_LOAD_ARG_FROM_YA
-        jsr AS_FPWRT
-        
-        ; Now we need to divide BasePitch by our
-        ;  "steps" result, to get the base pitch
-        ;  for *this* note.
-        lda #<BasePitch
-        ldy #>BasePitch
-        jsr AS_FDIV
+        lda BasePitches,y
+        sta Pitch
+        iny
+        lda BasePitches,y
+        sta Pitch+1
 	rts
 NoteNameErr:
 	; handle note spec error
@@ -589,12 +583,6 @@ NoteNameErr:
         txs
 @noMsg:
 	jmp SkipSpaces
-NoteSteps:
-	; How many steps away from "A" each note
-        ;  is. A and B are adjusted up by an
-        ;  octave, so that octaves "start" at C
-        ;  and not A.
-	.byte 12,14,3,5,7,8,10
 
 Print:
 	sta @lda+1
