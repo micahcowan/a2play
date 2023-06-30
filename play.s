@@ -121,6 +121,11 @@ Pitch:
 Iterations:
 	; Reset for every note. Stored as BE 16-bit uint
         .word 0
+DotsOrTrips:
+	; Tracks whether we've seen a dot or triplet
+kDotted = 1
+kTriplet = 2
+	.byte 0
 Tempo:
 	; Stored in "cycles per minute" that 4 beats takes,
         ;  as a big-endian 32-bit unsigned int.
@@ -367,13 +372,42 @@ GetDuration:
         beq @rewind ; not a note type, rewind
 @cmp = * + 1
         cmp #$00 ; OVERWRITTEN
-        beq CalcDuration
+        beq @checkSuffixes
         inx
         bne @lo
 @rewind:
 	jsr StrRewind
 @nevermind:
 	rts
+@checkSuffixes:
+	txa
+        pha ; Save Xreg away
+        
+        lda #0
+        sta DotsOrTrips
+        
+        ; Check for "dotted" or triplet
+@checkSuffLoop:
+        jsr StrGetNext
+        cmp #'.'
+        bne @notDotted
+   	; dotted!
+        lda #kDotted
+        bne @update ; always
+@notDotted:
+	cmp #'3'
+        bne @notTriplet
+        ; triplet!
+        lda #kTriplet
+@update:
+	ora DotsOrTrips
+        sta DotsOrTrips
+        bne @checkSuffLoop
+@notTriplet:
+	jsr StrRewind
+        
+        pla
+        tax ; Restore Xreg (duration)
 CalcDuration:
 	; Copy Tempo to Duration, and shift until we get our
         ;  duration.
@@ -400,15 +434,11 @@ CalcDuration:
         bne @durShiftLoop
 @durShiftDone:
         
-        ; XXX check for triplet
-        
         ; Check for "dotted"
-        jsr StrGetNext
-        cmp #'.'
-        beq @dotted
-	jmp StrRewind
-@dotted:
-	; XXX what about dotted triplet?
+        lda #kDotted
+        bit DotsOrTrips
+        beq @notDotted ; no dot detected
+        ; dotted!
 	; Halve the duration (value of just the dot)
         ;  and push result to stack
         ldx #0
@@ -430,7 +460,46 @@ CalcDuration:
         sta Duration,x
         dex
         bpl @dottedAdd
+
+@notDotted:
+        ; Check for triplet
+        lda #kTriplet
+        bit DotsOrTrips
+        beq @cleanup ; no triplets; nothing left to do
         
+	; We want triplets; this means double the duration
+        ;  and then divide by three.
+        ; First, move it into Dividend, doubling as we go
+        ldx #3
+        clc
+@doubleLoop:
+        lda Duration,x
+        rol
+        sta locDividend,x
+        dex
+        bpl @doubleLoop
+        
+        ; Now move 3 into the divisor
+        lda #3
+        sta locDivisor+3
+        lda #0
+        sta locDivisor
+        sta locDivisor+1
+        sta locDivisor+2
+        
+        jsr div32
+        
+        ; Now move back to Duration
+        ldx #3
+@tripCopyBack:
+	lda locQuotient,x
+        sta Duration,x
+        dex
+        bpl @tripCopyBack
+        
+@cleanup:
+        lda #0
+        sta DotsOrTrips
         rts
 
 CalcIterations:

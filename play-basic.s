@@ -16,7 +16,7 @@ FIX_LINE .set LINE_NUMBER
 .elseif 0
 	line "& PLAY,",'"',"C D E F G A B C5",'"'
         scrcode "RUN",$0D
-.elseif 1
+.elseif 0
 	; Major scales test
         lineP "MAJOR SCALES IN C"
         line "& PLAY,",'"',"T180",'"',": REM SET TEMPO"
@@ -34,11 +34,23 @@ FIX_LINE .set LINE_NUMBER
 	line "& PLAY,",'"',"T240"
         line "& PLAY,",'"',"C4E R G3 R C4 R E R CH. G3E R C4",'"'
         scrcode "RUN",$0D
-.elseif 1
+.elseif 0
+	; sound effect
 	line "& PLAY,",'"',"T1600"
         line "& PLAY,",'"',"C4E E G C5 G4 E C",'"'
         line "& PLAY,",'"',"E G C5 G4 E C",'"'
         line "& PLAY,",'"',"E G C5 G4 E C",'"'
+        scrcode "RUN",$0D
+.elseif 0
+	; dotted
+	line "& PLAY,",'"',"T240"
+        line "& PLAY,",'"',"C4E R G3 R C4 R E R CH. G3E R C4",'"'
+        scrcode "RUN",$0D
+.elseif 1
+	; triplets
+	line "& PLAY,",'"',"T120"
+        line "& PLAY,",'"',"G3E3 F# G C4Q B3E B- AE3 G+ A D4Q",'"'
+        line "& PLAY,",'"',"D-E C B3E3 A# B E4Q E-E D CH.",'"'
         scrcode "RUN",$0D
 .endif
 ASoftEnd:
