@@ -120,10 +120,10 @@ Iterations:
 	; Reset for every note. Stored as BE 16-bit uint
         .word 0
 Tempo:
-	; Stored in "cycles per minute" that a beat takes,
+	; Stored in "cycles per minute" that 4 beats takes,
         ;  as a big-endian 32-bit unsigned int.
         ; Default value is 340,909; equivalent to 180bpm
-        .byte $00, $05, $33, $AD
+        .byte $00, $14, $CE, $B4
 Duration:
 	; Current note duration, same format as Tempo:
         ;  "cycles per minute" that a beat takes.
