@@ -146,6 +146,7 @@ YesItsUs:
         jsr PrepNoteStr
         jsr MaybeTempo
 @loop:
+        jsr CheckKeyboard
 	jsr DoNextNote
         ; Zero flag is set iff music string has
         ;  been consumed.
@@ -277,6 +278,32 @@ MaybeTempo:
         lda StrSaved+1
         sta StrSpec
         rts ; we'll fail in DoNextNote
+
+CheckKeyboard:
+        lda SS_KBD
+        bpl @exit ; no key pressed
+        cmp #$93  ; Ctrl-S?
+        bne @NotCtrlS
+        ; Ctrl-S. Pause until another keypress
+        bit SS_KBDSTRB
+@wait:
+        lda SS_KBD
+        bpl @wait
+        cmp #$83  ; Ctrl-C?
+        beq @CtrlC
+        bit SS_KBDSTRB ; clear key
+@NotCtrlS:
+@CkCtrlC:
+        cmp #$83  ; Ctrl-C?
+        bne @NotCtrlC
+@CtrlC:
+        ; Set StrRemain to zero so DoNextNote
+        ;  believes it's reached the end (i.e., quit playing)
+        lda #0
+        sta StrRemain
+@NotCtrlC:
+@exit:
+        rts
 
 DoNextNote:
 	; Save the current position as the start
