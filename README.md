@@ -6,6 +6,8 @@ Welcome to **a2play**! The aim of this project is to provide a *user-friendly* m
 [**Click the video link below, to see it in action!<br />
 ![a2play showcase video](https://img.youtube.com/vi/zDNLja04yko/0.jpg)](https://www.youtube.com/watch?v=zDNLja04yko)
 
+You can also [try it out](https://8bitworkshop.com/redir.html?repo=micahcowan%2Fa2play&platform=apple2&file=play-start.s) and play with the code, at 8bitworkshop.com.
+
 ## Usage
 
 ### Using in your AppleSoft BASIC programs
